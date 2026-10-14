@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Pocketly">
+  <rect width="512" height="512" rx="112" fill="#2a78d6"/>
+  <path d="M136 168h240a24 24 0 0 1 24 24v152a24 24 0 0 1-24 24H136a24 24 0 0 1-24-24V192a24 24 0 0 1 24-24Z" fill="#fcfcfb"/>
+  <path d="M112 232h288v48H112z" fill="#cde2fb"/>
+  <circle cx="336" cy="256" r="28" fill="#2a78d6"/>
+  <path d="M176 136h160v32H176z" fill="#184f95"/>
+</svg>

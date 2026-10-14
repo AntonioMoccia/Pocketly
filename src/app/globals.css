@@ -1,0 +1,255 @@
+@import "tailwindcss";
+
+/*
+ * Token di colore e forma, dal file di design.
+ *
+ * I colori stanno qui una volta sola, in tre blocchi: `:root` porta la palette
+ * chiara completa, la media query copre l'impostazione di sistema, lo scope
+ * `data-theme` copre l'interruttore manuale, che deve vincere in entrambe le
+ * direzioni.
+ *
+ * I cinque colori di categoria sono una palette categorica verificata per
+ * separazione CVD e contrasto su entrambe le superfici. Rispetto al file di
+ * design, "Pocket" e "Capitale garantito" si scambiano viola e ambra: nel
+ * disegno originale viola e blu finivano adiacenti nella barra impilata, dove
+ * un occhio deuteranope non li distingue (delta E 1,9). Le tinte sono le stesse,
+ * cambia solo quale categoria porta quale.
+ */
+@theme {
+  /* Superfici */
+  --color-surface: #fdf4ec;
+  --color-surface-1: #ffffff;
+  --color-surface-2: #fbeee3;
+  --color-surface-3: #fde8dc;
+  --color-sidebar: #fbe8da;
+  --color-border: #f3e4d7;
+  --color-border-strong: #e4d1c0;
+
+  /* Testo */
+  --color-ink: #1f1a17;
+  --color-ink-secondary: #574e48;
+  --color-ink-muted: #8c8178;
+
+  /* Accento */
+  --color-accent: #c4461a;
+  --color-accent-hover: #a93a13;
+  --color-accent-bright: #f2663c;
+  --color-accent-soft: #fde2d3;
+  --color-accent-ink: #9c3714;
+
+  /* Stati */
+  --color-good: #1c7a52;
+  --color-good-soft: #d8f0e3;
+  --color-warning: #6e5410;
+  --color-warning-soft: #fbeca8;
+  --color-critical: #c4461a;
+  --color-critical-soft: #fbdccf;
+
+  /* Categorie del patrimonio, in ordine fisso */
+  --color-cat-1: #e8552f;
+  --color-cat-2: #7155d6;
+  --color-cat-3: #2e9e6e;
+  --color-cat-4: #d9941f;
+  --color-cat-5: #1c7fc4;
+
+  /* Sfondi pastello delle buste e dei Pocket */
+  --color-pocket-1: #fbe2d2;
+  --color-pocket-2: #e7e2fb;
+  --color-pocket-3: #d9e9fa;
+  --color-pocket-4: #fbebc2;
+  --color-pocket-5: #fbdce8;
+  --color-pocket-6: #d8f0df;
+  --color-pocket-7: #fde5c9;
+  --color-pocket-ink-1: #8a3a1c;
+  --color-pocket-ink-2: #3f2f8c;
+  --color-pocket-ink-3: #1b5784;
+  --color-pocket-ink-4: #6e5410;
+  --color-pocket-ink-5: #8a2f54;
+  --color-pocket-ink-6: #1c6b45;
+  --color-pocket-ink-7: #8a5416;
+
+  --color-grid: #f0e2d5;
+
+  --font-sans: var(--font-figtree), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+
+  --radius-card: 1.25rem;
+  --radius-field: 0.875rem;
+  --radius-chip: 0.875rem;
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --color-surface: #171310;
+      --color-surface-1: #221b17;
+      --color-surface-2: #2a211c;
+      --color-surface-3: #38261c;
+      --color-sidebar: #221b17;
+      --color-border: #342a24;
+      --color-border-strong: #4a3c33;
+      --color-ink: #f7efe8;
+      --color-ink-secondary: #bfb2a7;
+      --color-ink-muted: #918377;
+      --color-accent: #f4794f;
+      --color-accent-hover: #f98f69;
+      --color-accent-bright: #f4794f;
+      --color-accent-soft: #3d2519;
+      --color-accent-ink: #ffd2bf;
+      --color-good: #4cb98a;
+      --color-good-soft: #15321f;
+      --color-warning: #e3c05a;
+      --color-warning-soft: #3a2f10;
+      --color-critical: #f4794f;
+      --color-critical-soft: #3d1f16;
+      --color-cat-1: #e05b36;
+      --color-cat-2: #8674e0;
+      --color-cat-3: #28a376;
+      --color-cat-4: #bd8718;
+      --color-cat-5: #2e88cc;
+      --color-pocket-1: #3a2a22;
+      --color-pocket-2: #2b2740;
+      --color-pocket-3: #203141;
+      --color-pocket-4: #3a3020;
+      --color-pocket-5: #3b2630;
+      --color-pocket-6: #1f3328;
+      --color-pocket-7: #3a2d1d;
+      --color-pocket-ink-1: #f6c4ab;
+      --color-pocket-ink-2: #cdc4f7;
+      --color-pocket-ink-3: #b3d7f3;
+      --color-pocket-ink-4: #f0d79a;
+      --color-pocket-ink-5: #f3bed2;
+      --color-pocket-ink-6: #a9e0c3;
+      --color-pocket-ink-7: #f0d3a6;
+      --color-grid: #2f2621;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --color-surface: #171310;
+    --color-surface-1: #221b17;
+    --color-surface-2: #2a211c;
+    --color-surface-3: #38261c;
+    --color-sidebar: #221b17;
+    --color-border: #342a24;
+    --color-border-strong: #4a3c33;
+    --color-ink: #f7efe8;
+    --color-ink-secondary: #bfb2a7;
+    --color-ink-muted: #918377;
+    --color-accent: #f4794f;
+    --color-accent-hover: #f98f69;
+    --color-accent-bright: #f4794f;
+    --color-accent-soft: #3d2519;
+    --color-accent-ink: #ffd2bf;
+    --color-good: #4cb98a;
+    --color-good-soft: #15321f;
+    --color-warning: #e3c05a;
+    --color-warning-soft: #3a2f10;
+    --color-critical: #f4794f;
+    --color-critical-soft: #3d1f16;
+    --color-cat-1: #e05b36;
+    --color-cat-2: #8674e0;
+    --color-cat-3: #28a376;
+    --color-cat-4: #bd8718;
+    --color-cat-5: #2e88cc;
+    --color-pocket-1: #3a2a22;
+    --color-pocket-2: #2b2740;
+    --color-pocket-3: #203141;
+    --color-pocket-4: #3a3020;
+    --color-pocket-5: #3b2630;
+    --color-pocket-6: #1f3328;
+    --color-pocket-7: #3a2d1d;
+    --color-pocket-ink-1: #f6c4ab;
+    --color-pocket-ink-2: #cdc4f7;
+    --color-pocket-ink-3: #b3d7f3;
+    --color-pocket-ink-4: #f0d79a;
+    --color-pocket-ink-5: #f3bed2;
+    --color-pocket-ink-6: #a9e0c3;
+    --color-pocket-ink-7: #f0d3a6;
+    --color-grid: #2f2621;
+  }
+
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-surface);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 0.9375rem;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.02em;
+  }
+
+  /* Gli importi sono colonne di numeri: vanno allineati per cifra. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    appearance: none;
+    margin: 0;
+  }
+
+  @media print {
+    body {
+      background: #fff;
+      color: #000;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer utilities {
+  /* Area tattile minima su telefono. */
+  .tap {
+    min-height: 2.75rem;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+
+  /* Il numero guida di una schermata. */
+  .hero-figure {
+    font-size: clamp(2.25rem, 7vw, 3.25rem);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.05;
+  }
+}

@@ -1,0 +1,44 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-pocketly}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pocketly}
+      POSTGRES_DB: ${POSTGRES_DB:-pocketly}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pocketly} -d ${POSTGRES_DB:-pocketly}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-pocketly}:${POSTGRES_PASSWORD:-pocketly}@db:5432/${POSTGRES_DB:-pocketly}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET mancante, vedi .env.example}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY mancante, vedi .env.example}
+      EDITION: ${EDITION:-self}
+      DEFAULT_LOCALE: ${DEFAULT_LOCALE:-it}
+      SIGNUP: ${SIGNUP:-invite}
+      NODE_ENV: production
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+volumes:
+  db-data:
