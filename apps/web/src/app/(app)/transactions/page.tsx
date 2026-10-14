@@ -33,19 +33,21 @@ type Filter = "all" | "uncategorized" | "income" | "expense" | "transfer";
 export default async function TransactionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ filter?: string; month?: string; account?: string; envelope?: string }>;
+  searchParams: Promise<{ filter?: string; account?: string; envelope?: string }>;
 }) {
   const context = await requireContext();
   const t = await getTranslations("transactions");
   const { locale } = context;
   const query = await searchParams;
 
-  const month = query.month ?? startOfMonth(today());
+  // La lista e una sola, dal piu recente; buste e percentuale restano sul
+  // mese in corso, come nel resto dell'app.
+  const month = startOfMonth(today());
   const filter = (query.filter ?? "all") as Filter;
 
   const [rows, envelopes, accounts, todos, pending, rate] = await Promise.all([
     listTransactions({
-      month,
+      limit: 1000,
       accountId: query.account,
       envelopeId: query.envelope,
       uncategorized: filter === "uncategorized" ? true : undefined,
@@ -55,7 +57,7 @@ export default async function TransactionsPage({
     listEnvelopes({ month }),
     listAccounts(),
     listTransferTodos(),
-    uncategorizedCount(month),
+    uncategorizedCount(),
     categorizationRate(month),
   ]);
 
@@ -65,11 +67,19 @@ export default async function TransactionsPage({
     timeZone: "UTC",
   }).format(new Date(`${month}T00:00:00Z`));
 
-  // I movimenti si leggono per giorno, come un estratto conto.
-  const byDay = new Map<string, typeof rows>();
+  // I movimenti si leggono per mese e poi per giorno, come un estratto conto.
+  const byMonth = new Map<string, Map<string, typeof rows>>();
   for (const row of rows) {
-    byDay.set(row.date, [...(byDay.get(row.date) ?? []), row]);
+    const key = startOfMonth(row.date);
+    const days = byMonth.get(key) ?? new Map<string, typeof rows>();
+    days.set(row.date, [...(days.get(row.date) ?? []), row]);
+    byMonth.set(key, days);
   }
+  const monthFormat = new Intl.DateTimeFormat(locale, {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
 
   const overspent = envelopes.filter((envelope) => envelope.overspent);
   const filters: Filter[] = ["all", "uncategorized", "income", "expense", "transfer"];
@@ -77,7 +87,7 @@ export default async function TransactionsPage({
   return (
     <div className="space-y-5">
       <PageHeader
-        eyebrow={t("eyebrow", { month: monthLabel, count: rows.length })}
+        eyebrow={t("eyebrow", { count: rows.length })}
         title={t("title")}
         actions={<LinkButton href="/transactions/import">{t("import")}</LinkButton>}
       />
@@ -107,7 +117,7 @@ export default async function TransactionsPage({
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] lg:items-start">
-        <Card className="p-5">
+        <Card className={rows.length === 0 ? "p-5" : undefined}>
           {rows.length === 0 ? (
             <EmptyState
               title={t("empty")}
@@ -115,78 +125,96 @@ export default async function TransactionsPage({
               action={<LinkButton href="/transactions/import">{t("import")}</LinkButton>}
             />
           ) : (
-            <div className="space-y-5">
-              {[...byDay.entries()].map(([date, items]) => (
-                <section key={date}>
-                  <h2 className="mb-2 text-sm font-semibold text-ink-muted">
-                    {formatDate(date, locale, "long")}
+            // Su desktop scorre la card, non la pagina: l'altezza e quella
+            // della finestra meno intestazione e filtri. Su mobile scorre la
+            // pagina, una card scorrevole dentro una pagina scorrevole non si usa.
+            <div className="space-y-6 px-5 pb-5 lg:max-h-[calc(100dvh-18rem)] lg:min-h-96 lg:overflow-y-auto lg:overscroll-contain lg:rounded-card">
+              {[...byMonth.entries()].map(([monthKey, days]) => (
+                <section key={monthKey}>
+                  {/* Resta in cima mentre scorri i movimenti del mese: sotto
+                      l'header mobile (4rem), in cima alla card su desktop. */}
+                  <h2 className="sticky top-16 z-10 -mx-5 bg-surface-1/95 px-5 pb-2 pt-4 text-base font-bold capitalize text-ink backdrop-blur lg:top-0">
+                    {monthFormat.format(new Date(`${monthKey}T00:00:00Z`))}
                   </h2>
-                  <ul className="space-y-1.5">
-                    {items.map((row) => (
-                      <li key={row.id}>
-                        <Link
-                          href={`/transactions/${row.id}`}
-                          className={cn(
-                            "flex items-center gap-3 rounded-chip px-3 py-2.5 transition-colors hover:bg-surface-2",
-                            row.kind === "income" && !row.transferGroupId ? "bg-good-soft/60" : null,
-                            !row.categoryId && row.kind !== "transfer"
-                              ? "border border-dashed border-accent/50"
-                              : null,
-                          )}
-                        >
-                          <span
-                            className={cn(
-                              "flex size-9 shrink-0 items-center justify-center rounded-xl text-sm font-bold",
-                              row.transferGroupId
-                                ? "bg-surface-2 text-ink-muted"
-                                : row.kind === "income"
-                                  ? "bg-good-soft text-good"
-                                  : "bg-surface-2 text-ink-secondary",
-                            )}
-                            aria-hidden="true"
-                          >
-                            {row.transferGroupId ? "⇄" : row.description.slice(0, 1).toUpperCase()}
-                          </span>
-
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate font-semibold text-ink">
-                              {row.description}
-                            </span>
-                            <span className="block truncate text-xs text-ink-muted">
-                              {row.transferGroupId
-                                ? t("transferExcluded")
-                                : row.categoryName
-                                  ? `${row.categoryName}${row.envelopeName ? ` · ${row.envelopeName}` : ""}`
-                                  : t("toCategorize")}
-                            </span>
-                          </span>
-
-                          {row.envelopeName && !row.transferGroupId ? (
-                            <span className="hidden items-center gap-1.5 rounded-full bg-surface-2 px-2.5 py-1 text-xs font-medium text-ink-secondary sm:flex">
+                  <div className="mt-2 space-y-5">
+                    {[...days.entries()].map(([date, items]) => (
+                    <section key={date}>
+                      <h3 className="mb-2 text-sm font-semibold text-ink-muted">
+                        {formatDate(date, locale, "long")}
+                      </h3>
+                      <ul className="space-y-1.5">
+                        {items.map((row) => (
+                          <li key={row.id}>
+                            <Link
+                              href={`/transactions/${row.id}`}
+                              className={cn(
+                                "flex items-center gap-3 rounded-chip px-3 py-2.5 transition-colors hover:bg-surface-2",
+                                row.kind === "income" && !row.transferGroupId ? "bg-good-soft/60" : null,
+                                !row.categoryId && row.kind !== "transfer"
+                                  ? "border border-dashed border-accent/50"
+                                  : null,
+                              )}
+                            >
                               <span
+                                className={cn(
+                                  "flex size-9 shrink-0 items-center justify-center rounded-xl text-sm font-bold",
+                                  row.transferGroupId
+                                    ? "bg-surface-2 text-ink-muted"
+                                    : row.kind === "income"
+                                      ? "bg-good-soft text-good"
+                                      : "bg-surface-2 text-ink-secondary",
+                                )}
                                 aria-hidden="true"
-                                className={cn("size-2 rounded-full", pocketDot(row.envelopeColor ?? 0))}
-                              />
-                              {row.envelopeName}
-                            </span>
-                          ) : null}
+                              >
+                                {row.transferGroupId ? "⇄" : row.description.slice(0, 1).toUpperCase()}
+                              </span>
 
-                          <span
-                            className={cn(
-                              "tabular shrink-0 font-bold",
-                              row.transferGroupId
-                                ? "text-ink-muted"
-                                : row.amount > 0
-                                  ? "text-good"
-                                  : "text-ink",
-                            )}
-                          >
-                            {formatMoney(row.amount, row.currency, locale, { showSign: row.amount > 0 })}
-                          </span>
-                        </Link>
-                      </li>
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate font-semibold text-ink">
+                                  {row.description}
+                                </span>
+                                <span className="block truncate text-xs text-ink-muted">
+                                  {row.transferGroupId
+                                    ? t("transferExcluded")
+                                    : row.categoryName
+                                      ? `${row.categoryName}${row.envelopeName ? ` · ${row.envelopeName}` : ""}`
+                                      : t("toCategorize")}
+                                  {/* Entrata ancora da dividere tra i Pocket. */}
+                                  {row.amount > 0 && !row.transferGroupId && !row.ignored && !row.incomeEventId
+                                    ? ` · ${t("toSplit")}`
+                                    : null}
+                                </span>
+                              </span>
+
+                              {row.envelopeName && !row.transferGroupId ? (
+                                <span className="hidden items-center gap-1.5 rounded-full bg-surface-2 px-2.5 py-1 text-xs font-medium text-ink-secondary sm:flex">
+                                  <span
+                                    aria-hidden="true"
+                                    className={cn("size-2 rounded-full", pocketDot(row.envelopeColor ?? 0))}
+                                  />
+                                  {row.envelopeName}
+                                </span>
+                              ) : null}
+
+                              <span
+                                className={cn(
+                                  "tabular shrink-0 font-bold",
+                                  row.transferGroupId
+                                    ? "text-ink-muted"
+                                    : row.amount > 0
+                                      ? "text-good"
+                                      : "text-ink",
+                                )}
+                              >
+                                {formatMoney(row.amount, row.currency, locale, { showSign: row.amount > 0 })}
+                              </span>
+                            </Link>
+                          </li>
                     ))}
                   </ul>
+                </section>
+                    ))}
+                  </div>
                 </section>
               ))}
             </div>

@@ -10,18 +10,21 @@ import { getPayday } from "@/data/payday";
 import { parseAmountToCents } from "@pocketly/domain/money";
 import { today } from "@pocketly/domain/date";
 import type { AllocationLineInput } from "@pocketly/domain/allocation";
+import { INCOME_KINDS } from "@pocketly/domain/income";
 
 function refresh(incomeId?: string) {
   revalidatePath("/payday");
   if (incomeId) revalidatePath(`/payday/${incomeId}`);
+  revalidatePath("/transactions");
   revalidatePath("/");
 }
 
 const incomeSchema = z.object({
   date: isoDateSchema,
-  kind: z.enum(["salary", "invoice", "other"]),
+  kind: z.enum(INCOME_KINDS),
   accountId: nullableId,
   templateId: nullableId,
+  transactionId: nullableId,
   note: z.string().trim().max(500).optional(),
 });
 
@@ -30,6 +33,7 @@ export async function startPaydayAction(
   formData: FormData,
 ): Promise<ActionState> {
   let created: string | null = null;
+  let closed = false;
 
   const result = await runAction(async () => {
     const context = await requireWritableContext();
@@ -38,8 +42,11 @@ export async function startPaydayAction(
       kind: formData.get("kind") ?? "salary",
       accountId: formData.get("accountId") ?? "",
       templateId: formData.get("templateId") ?? "",
+      transactionId: formData.get("transactionId") ?? "",
       note: formData.get("note") ?? "",
     });
+    // Il pulsante premuto decide: "Ripartisci subito" o il wizard.
+    const quick = formData.get("mode") === "quick";
 
     const currency = String(formData.get("currency") ?? context.household.baseCurrency);
     const amount = parseAmountToCents(String(formData.get("amount") ?? ""), currency);
@@ -47,23 +54,32 @@ export async function startPaydayAction(
       return { status: "error", messageKey: "balances.invalidAmount", fieldErrors: { amount: "invalid" } };
     }
 
-    // Senza modello scelto l'API applica quello predefinito.
-    const { id } = await api.post<{ id: string }>("/payday", {
+    // Senza modello scelto l'API applica quello del tipo, o il predefinito.
+    const outcome = await api.post<{ id: string; closed: boolean }>("/payday", {
       date: parsed.date,
       amount,
       currency,
       kind: parsed.kind,
       accountId: parsed.accountId,
       templateId: parsed.templateId,
+      transactionId: parsed.transactionId,
+      // "none" e una scelta esplicita: righe libere, nessun modello automatico.
+      skipTemplate: formData.get("templateId") === "none",
       note: parsed.note ?? null,
+      quick,
     });
-    created = id;
+    created = outcome.id;
+    closed = outcome.closed;
 
     refresh(created);
     return ok({ id: created });
   });
 
-  if (result.status === "success" && created) redirect(`/payday/${created}`);
+  // Una rapida andata a buon fine torna alla lista; se il modello non copre
+  // tutto l'importo si apre il wizard, dove si vede cosa manca.
+  if (result.status === "success" && created) {
+    redirect(closed ? `/payday?split=${created}` : `/payday/${created}`);
+  }
   return result;
 }
 

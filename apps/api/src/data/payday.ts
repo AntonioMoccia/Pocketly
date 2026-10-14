@@ -1,5 +1,5 @@
 /**
- * Giorno di paga (F1.7) ed entrate irregolari (F1.8).
+ * Entrate e ripartizione (F1.7, F1.8): stipendio, fattura, vendita, rimborso.
  *
  * Il wizard tiene lo stato nel database, non nel browser: un'entrata si puo
  * lasciare a meta e riprendere dal telefono. La regola che non si piega e
@@ -7,7 +7,7 @@
  */
 import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@api/db";
-import { allocations, incomeEvents } from "@api/db/schema";
+import { allocations, incomeEvents, transactions } from "@api/db/schema";
 import {
   canClosePayday,
   computeAllocation,
@@ -16,17 +16,20 @@ import {
 } from "@pocketly/domain/allocation";
 import { isValidCurrency } from "@pocketly/domain/money";
 import { CannotCloseError, DomainError } from "@pocketly/domain/errors";
+import type { IncomeKind } from "@pocketly/domain/income";
 import { templateLines } from "./templates";
 
 export type IncomeInput = {
   date: string;
   amount: number;
   currency: string;
-  kind: "salary" | "invoice" | "other";
+  kind: IncomeKind;
   /** Conto su cui arriva l'entrata. */
   accountId: string | null;
   templateId: string | null;
   note: string | null;
+  /** Movimento importato da cui nasce la ripartizione, se c'e. */
+  transactionId?: string | null;
 };
 
 export type PaydayAllocation = {
@@ -47,7 +50,7 @@ export type Payday = {
   date: string;
   amountCents: number;
   currency: string;
-  kind: "salary" | "invoice" | "other";
+  kind: IncomeKind;
   /** Conto su cui e arrivata l'entrata. */
   accountId: string | null;
   templateId: string | null;
@@ -94,6 +97,22 @@ export async function createIncome(
       })
       .returning({ id: incomeEvents.id });
     if (!income) throw new DomainError("validation");
+
+    // Il movimento resta legato all'entrata: in lista risulta gia ripartito.
+    if (input.transactionId) {
+      const linked = await tx
+        .update(transactions)
+        .set({ incomeEventId: income.id })
+        .where(
+          and(
+            eq(transactions.id, input.transactionId),
+            eq(transactions.householdId, householdId),
+            isNull(transactions.incomeEventId),
+          ),
+        )
+        .returning({ id: transactions.id });
+      if (linked.length === 0) throw new DomainError("alreadySplit");
+    }
 
     if (plan.lines.length > 0) {
       await tx.insert(allocations).values(

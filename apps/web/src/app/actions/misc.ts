@@ -9,6 +9,7 @@ import { api } from "@/lib/api";
 import { parseAmountToCents } from "@pocketly/domain/money";
 import { today } from "@pocketly/domain/date";
 import type { AllocationLineInput } from "@pocketly/domain/allocation";
+import { isIncomeKind } from "@pocketly/domain/income";
 
 // ---------------------------------------------------------------------------
 // Obiettivi
@@ -164,9 +165,11 @@ export async function saveTemplateAction(
     const name = String(formData.get("name") ?? "").trim();
     if (name === "") return fail("errors.validation");
 
+    const kindValue = formData.get("incomeKind");
     const input = {
       name,
       isDefault: String(formData.get("isDefault") ?? "") === "on",
+      incomeKind: isIncomeKind(kindValue) ? kindValue : null,
       lines: readTemplateLines(formData, context.household.baseCurrency),
     };
     const { id } = templateId

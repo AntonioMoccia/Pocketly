@@ -167,7 +167,15 @@ export const accountCategory = pgEnum("account_category", [
 ]);
 
 export const balanceSource = pgEnum("balance_source", ["manual", "csv", "bank"]);
-export const incomeKind = pgEnum("income_kind", ["salary", "invoice", "other"]);
+/** Stesso elenco di `INCOME_KINDS` in `@pocketly/domain/income`. */
+export const incomeKind = pgEnum("income_kind", [
+  "salary",
+  "invoice",
+  "sale",
+  "refund",
+  "gift",
+  "other",
+]);
 export const allocationKind = pgEnum("allocation_kind", ["fixed", "percent", "remainder"]);
 export const percentBasis = pgEnum("percent_basis", ["gross", "remaining"]);
 export const goalStatus = pgEnum("goal_status", ["active", "reached", "paused", "archived"]);
@@ -373,6 +381,8 @@ export const allocationTemplates = pgTable(
       .references(() => households.id, { onDelete: "cascade" }),
     name: text().notNull(),
     isDefault: boolean().notNull().default(false),
+    /** Tipo di entrata per cui il modello si propone da solo: uno per tipo. */
+    incomeKind: incomeKind(),
     createdAt: createdAt(),
   },
   (t) => [index("allocation_templates_household_idx").on(t.householdId)],

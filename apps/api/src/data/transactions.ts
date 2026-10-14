@@ -33,6 +33,8 @@ export type TransactionRow = {
   envelopeColor: number | null;
   envelopeAccountId: string | null;
   transferGroupId: string | null;
+  /** Entrata ripartita a partire da questo movimento. */
+  incomeEventId: string | null;
   note: string | null;
 };
 
@@ -83,6 +85,7 @@ export async function listTransactions(
       envelopeColor: envelopes.color,
       envelopeAccountId: envelopes.accountId,
       transferGroupId: transactions.transferGroupId,
+      incomeEventId: transactions.incomeEventId,
       note: transactions.note,
     })
     .from(transactions)

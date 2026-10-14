@@ -19,7 +19,8 @@ import {
   setAllocationDone,
   updateIncome,
 } from "@api/data/payday";
-import { defaultTemplate } from "@api/data/templates";
+import { templateForKind } from "@api/data/templates";
+import { INCOME_KINDS } from "@pocketly/domain/income";
 import { saveNetWorthSnapshot } from "@api/data/networth";
 import { Ctx, Writable } from "../../common/guards";
 import type { RequestContext } from "../../common/context";
@@ -29,10 +30,19 @@ const incomeSchema = z.object({
   date: isoDate,
   amount: cents.refine((value) => value > 0),
   currency,
-  kind: z.enum(["salary", "invoice", "other"]),
+  kind: z.enum(INCOME_KINDS),
   accountId: nullableId,
   templateId: nullableId,
   note: z.string().trim().max(500).nullish(),
+  /** Movimento in entrata da cui parte la ripartizione. */
+  transactionId: nullableId.optional(),
+  /**
+   * Ripartizione rapida: applica il modello, spunta le righe e chiude, senza
+   * passare dal wizard. Pensata per le entrate piccole, come una vendita.
+   */
+  quick: z.boolean().optional(),
+  /** "Nessun modello" scelto a mano: niente modello automatico. */
+  skipTemplate: z.boolean().optional(),
 });
 
 const lineSchema = z.object({
@@ -83,9 +93,11 @@ export class PaydayController {
   async create(@Ctx() ctx: RequestContext, @Body() body: unknown) {
     const parsed = incomeSchema.parse(body);
 
-    // Senza modello scelto si applica quello predefinito: il caso comune e
-    // "lo stipendio di sempre", e non deve richiedere una scelta.
-    const templateId = parsed.templateId ?? (await defaultTemplate(ctx.household.id))?.id ?? null;
+    // Senza modello scelto si applica quello del tipo di entrata, o il
+    // predefinito: il caso comune non deve richiedere una scelta.
+    const templateId = parsed.skipTemplate
+      ? null
+      : (parsed.templateId ?? (await templateForKind(ctx.household.id, parsed.kind))?.id ?? null);
 
     const id = await createIncome(
       ctx.household.id,
@@ -97,10 +109,23 @@ export class PaydayController {
         accountId: parsed.accountId,
         templateId,
         note: parsed.note ?? null,
+        transactionId: parsed.transactionId ?? null,
       },
       ctx.user.id,
     );
-    return { id };
+
+    // La rapida chiude solo se il modello copre tutto l'importo: altrimenti
+    // si apre il wizard, dove si vede cosa manca.
+    if (parsed.quick) {
+      const payday = await getPayday(ctx.household.id, id);
+      if (payday && payday.allocations.length > 0 && payday.plan.unassignedCents === 0) {
+        await setAllAllocationsDone(ctx.household.id, id, true);
+        await closePayday(ctx.household.id, id);
+        await saveNetWorthSnapshot(ctx.household.id, ctx.household.baseCurrency);
+        return { id, closed: true };
+      }
+    }
+    return { id, closed: false };
   }
 
   /** Importo e righe si salvano insieme: il piano dipende da entrambi. */

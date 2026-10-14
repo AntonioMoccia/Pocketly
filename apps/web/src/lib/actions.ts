@@ -82,6 +82,7 @@ export function domainKey(code: string): string {
     lastOwner: "settings.lastOwner",
     inviteInvalid: "auth.inviteInvalid",
     notFound: "errors.notFound",
+    alreadySplit: "payday.alreadySplit",
     validation: "errors.validation",
     importColumns: "import.columnsMissing",
     multiple_remainder: "templates.issues.multiple_remainder",

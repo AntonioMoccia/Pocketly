@@ -105,6 +105,7 @@ const DEFAULT_TREE: { it: string; en: string; kind: "expense" | "income" | "tran
   { it: "Altro", en: "Other", kind: "expense" },
   { it: "Stipendio", en: "Salary", kind: "income" },
   { it: "Fatture", en: "Invoices", kind: "income" },
+  { it: "Vendite", en: "Sales", kind: "income" },
   { it: "Rimborsi", en: "Refunds", kind: "income" },
   { it: "Interessi", en: "Interest", kind: "income" },
   { it: "Giroconto", en: "Transfer", kind: "transfer" },

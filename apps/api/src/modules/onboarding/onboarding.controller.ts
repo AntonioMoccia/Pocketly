@@ -201,8 +201,9 @@ export class OnboardingController {
           ];
 
     const id = await saveTemplate(ctx.household.id, {
-      name: preset === "freelance" ? "Entrata" : "Stipendio",
+      name: preset === "freelance" ? "Fattura" : "Stipendio",
       isDefault: true,
+      incomeKind: preset === "freelance" ? "invoice" : "salary",
       lines,
     });
     return { id };

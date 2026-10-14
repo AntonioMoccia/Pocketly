@@ -15,6 +15,13 @@
       "when": 1792008836715,
       "tag": "0001_default_pocket",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792017965707,
+      "tag": "0002_income_kinds",
+      "breakpoints": true
     }
   ]
 }

@@ -18,6 +18,7 @@ import {
 import { GroupedPicker } from "@/components/grouped-picker";
 import { computeAllocation, validateTemplate, type AllocationLineInput } from "@pocketly/domain/allocation";
 import { formatMoney, parseAmountToCents, toMajor } from "@pocketly/domain/money";
+import { INCOME_KINDS, type IncomeKind } from "@pocketly/domain/income";
 
 type EnvelopeOption = { id: string; name: string; mainAccountName: string; color: number };
 
@@ -25,6 +26,7 @@ export type TemplateData = {
   id: string;
   name: string;
   isDefault: boolean;
+  incomeKind: IncomeKind | null;
   lines: AllocationLineInput[];
 };
 
@@ -84,7 +86,7 @@ export function TemplateEditor({
     <form action={action} className="space-y-4">
       {template ? <input type="hidden" name="templateId" value={template.id} /> : null}
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-3">
         <Field label={tCommon("name")} htmlFor="template-name">
           <Input
             id="template-name"
@@ -94,6 +96,16 @@ export function TemplateEditor({
             defaultValue={template?.name ?? ""}
             placeholder={t("namePlaceholder")}
           />
+        </Field>
+        <Field label={t("incomeKind")} htmlFor="template-kind" hint={t("incomeKindHelp")}>
+          <Select id="template-kind" name="incomeKind" defaultValue={template?.incomeKind ?? ""}>
+            <option value="">{t("incomeKindAny")}</option>
+            {INCOME_KINDS.map((kind) => (
+              <option key={kind} value={kind}>
+                {tPayday(`kinds.${kind}`)}
+              </option>
+            ))}
+          </Select>
         </Field>
         <div className="flex items-end pb-2">
           <Checkbox

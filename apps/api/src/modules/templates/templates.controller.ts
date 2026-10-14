@@ -15,6 +15,7 @@ import {
 import { Ctx, Writable } from "../../common/guards";
 import type { RequestContext } from "../../common/context";
 import { cents, nullableId } from "../../common/schemas";
+import { INCOME_KINDS } from "@pocketly/domain/income";
 
 const lineSchema = z.object({
   id: z.string().trim().min(1),
@@ -30,6 +31,7 @@ const lineSchema = z.object({
 const templateSchema = z.object({
   name: z.string().trim().min(1).max(80),
   isDefault: z.boolean(),
+  incomeKind: z.enum(INCOME_KINDS).nullish().transform((value) => value ?? null),
   lines: z.array(lineSchema),
 });
 

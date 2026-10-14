@@ -12,6 +12,7 @@ export const metadata = { title: "Modelli di ripartizione" };
 export default async function TemplatesPage() {
   const context = await requireContext();
   const t = await getTranslations("templates");
+  const tPayday = await getTranslations("payday");
 
   const [templates, envelopes] = await Promise.all([
     listTemplates(),
@@ -48,7 +49,12 @@ export default async function TemplatesPage() {
               <Card className="flex h-full flex-col p-5">
                 <div className="flex items-start justify-between gap-3">
                   <h2 className="text-lg font-bold text-ink">{template.name}</h2>
-                  {template.isDefault ? <Badge tone="accent">{t("isDefault")}</Badge> : null}
+                  <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+                    {template.incomeKind ? (
+                      <Badge tone="neutral">{tPayday(`kinds.${template.incomeKind}`)}</Badge>
+                    ) : null}
+                    {template.isDefault ? <Badge tone="accent">{t("isDefault")}</Badge> : null}
+                  </div>
                 </div>
                 <p className="mt-1 text-sm text-ink-secondary">
                   {t("lineCount", { count: template.lineCount })}

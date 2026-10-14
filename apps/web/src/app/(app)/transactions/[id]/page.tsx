@@ -6,6 +6,7 @@ import { getTransaction, listTransactions, ruleSuggestionFor } from "@/data/tran
 import { listCategories } from "@/data/categories";
 import { listEnvelopes } from "@/data/envelopes";
 import { formatDate, startOfMonth } from "@pocketly/domain/date";
+import { Card, LinkButton } from "@/components/ui";
 import { CategorizeForm } from "./categorize-form";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +18,7 @@ export default async function TransactionDetailPage({
 }) {
   const context = await requireContext();
   const t = await getTranslations("transactions");
+  const tPayday = await getTranslations("payday");
   const { id } = await params;
 
   const transaction = await getTransaction(id);
@@ -87,6 +89,30 @@ export default async function TransactionDetailPage({
         locale={context.locale}
         nextId={queue[0]?.id ?? null}
       />
+
+      {/* Un'entrata vera (non un giroconto) si ripartisce da qui. */}
+      {transaction.amount > 0 && transaction.transferGroupId === null && !transaction.ignored ? (
+        <Card className="flex flex-wrap items-center justify-between gap-3 p-5">
+          <div className="min-w-0">
+            <p className="font-semibold text-ink">
+              {transaction.incomeEventId ? tPayday("splitDone") : tPayday("splitThis")}
+            </p>
+            <p className="text-sm text-ink-muted">
+              {transaction.incomeEventId ? tPayday("splitDoneDesc") : tPayday("splitThisDesc")}
+            </p>
+          </div>
+          <LinkButton
+            href={
+              transaction.incomeEventId
+                ? `/payday/${transaction.incomeEventId}`
+                : `/payday?transaction=${transaction.id}#start`
+            }
+            variant={transaction.incomeEventId ? "secondary" : "primary"}
+          >
+            {transaction.incomeEventId ? tPayday("splitOpen") : tPayday("start")}
+          </LinkButton>
+        </Card>
+      ) : null}
     </div>
   );
 }
