@@ -4,17 +4,42 @@ Note per chi mette le mani nel codice. Le specifiche di prodotto stanno in
 [`spec.md`](spec.md) e [`spec-movimenti-e-buste.md`](spec-movimenti-e-buste.md);
 il disegno dell'interfaccia in [`ui-desktop-e-mobile.pdf`](ui-desktop-e-mobile.pdf).
 
-## I tre strati
+## Struttura
 
-| Cartella | Cosa contiene | Cosa non deve conoscere |
+Un monorepo con workspace npm e tre pacchetti:
+
+| Pacchetto | Cosa contiene | Cosa non deve conoscere |
 | --- | --- | --- |
-| `src/lib` | Dominio puro: denaro, cambi, ripartizione, buste, regole, CSV, date | il database, React |
-| `src/server` | Accesso ai dati, sempre filtrato per `householdId` | React |
-| `src/app` | Pagine, Server Action, interfaccia | SQL |
+| `packages/domain` | Dominio puro: denaro, cambi, ripartizione, buste, regole, CSV, date | il database, React, HTTP |
+| `apps/api` | API REST NestJS: accesso ai dati (`src/data`, sempre filtrato per `householdId`), schema e migrazioni (`src/db`), autenticazione, job | React |
+| `apps/web` | Frontend Next.js: pagine, Server Action, interfaccia | SQL, il database |
 
-Il dominio sta in `src/lib` perché è la parte che non può sbagliare: essendo
-fatta di funzioni pure si prova con test veloci, senza database e senza
-browser. Tutto ciò che riguarda i soldi vive lì.
+Il dominio sta in un pacchetto a sé perché è la parte che non può sbagliare:
+essendo fatto di funzioni pure si prova con test veloci, senza database e senza
+browser, e lo usano sia l'API sia il frontend (per esempio per formattare gli
+importi). Tutto ciò che riguarda i soldi vive lì.
+
+### Come parlano frontend e API
+
+L'API è l'unico servizio che apre una connessione a Postgres. Il frontend la
+chiama dal server (pagine e Server Action) con `src/lib/api.ts`, passando il
+cookie di sessione dell'utente; i moduli in `apps/web/src/data` espongono le
+letture con gli stessi nomi delle funzioni di `apps/api/src/data`, senza
+`householdId`, che l'API ricava dalla sessione e non accetta mai dal client.
+
+Le scritture passano dalle Server Action, che leggono il form, convertono gli
+importi scritti dall'utente in centesimi (la lingua la conosce il frontend) e
+chiamano un endpoint; l'API valida di nuovo con zod e risponde agli errori con
+un codice stabile (`{ code }`), che il frontend traduce.
+
+Better Auth vive nell'API, ma il browser la raggiunge dall'indirizzo del sito:
+`apps/web/src/app/api/auth/[...all]/route.ts` inoltra le richieste così come
+sono. Cookie e passkey restano legati al dominio che l'utente vede, e
+`BETTER_AUTH_URL` è l'URL pubblico del frontend.
+
+Gli endpoint stanno sotto `/api/v1`. Un controllo globale (`AccessGuard`)
+richiede sessione e household a ogni richiesta; i decoratori `@Public()`,
+`@SessionOnly()`, `@Writable()` e `@OwnerOnly()` allargano o stringono.
 
 ## Regole di dominio
 
@@ -27,10 +52,14 @@ passano da un arrotondamento esplicito. Quando una ripartizione non torna per
 un centesimo, il resto va alla quota con la parte frazionaria maggiore
 (`distribute`): così non si perde né si crea denaro.
 
-**Ogni conto conta una volta sola.** Un Pocket è un `account` con `parent_id`.
-Il totale di un conto comprensivo dei suoi Pocket (`totalWithChildren`) è un
-dato di sola lettura e non entra mai nel patrimonio, che somma i saldi propri
-(`computeNetWorth`).
+**Il saldo sta sui Pocket.** Un Pocket è un `account` con `parent_id`, sempre
+direttamente sotto un conto principale. Ogni conto principale nasce con un
+Pocket di default (`is_default`, "Principale") che tiene i soldi non messi da
+parte. Il conto non ha un saldo suo: i saldi si registrano solo sui Pocket e il
+totale del conto è la loro somma (`withPocketTotals`, `totalWithChildren`). Il
+patrimonio (`computeNetWorth`) somma i Pocket e salta i contenitori, così
+niente si conta due volte. Il Pocket di default segue il suo conto: non cambia
+conto, non si archivia e non si elimina da solo.
 
 **Lo storico non si riscrive.** Il tasso di cambio usato per un saldo viene
 salvato nella riga dello snapshot (`balance_snapshots.rate_to_base`) e ha la
@@ -65,9 +94,9 @@ query.
 
 ## Job pianificati
 
-Girano nel processo del server, avviati da `src/instrumentation.ts`, su coda
-pg-boss in Postgres: niente Redis e un solo processo da sorvegliare. Si
-spengono con `DISABLE_JOBS=true`.
+Girano nel processo dell'API (`apps/api/src/jobs`), su coda pg-boss in
+Postgres: niente Redis, e nessun servizio in più oltre a quello che parla già
+col database. Si spengono con `DISABLE_JOBS=true`.
 
 | Job | Quando | Cosa fa |
 | --- | --- | --- |
@@ -77,7 +106,7 @@ spengono con `DISABLE_JOBS=true`.
 
 ## Interfaccia
 
-I token di colore stanno una volta sola in `src/app/globals.css`, in tre
+I token di colore stanno una volta sola in `apps/web/src/app/globals.css`, in tre
 blocchi: `:root` per il chiaro, la media query per l'impostazione di sistema,
 lo scope `data-theme` per l'interruttore manuale.
 

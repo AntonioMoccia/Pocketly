@@ -80,6 +80,31 @@ pocketly.tuodominio.it {
 
 ---
 
+## Accesso da app e script
+
+Oltre al sito, l'API accetta client esterni (un'app mobile, uno script, un
+foglio di calcolo) sulla porta `API_PORT` (4000 di default). Il login
+restituisce un token di sessione, da mandare a ogni chiamata:
+
+```bash
+curl -s http://localhost:4000/api/v1/auth/token \
+  -H 'content-type: application/json' \
+  -d '{"email":"tu@esempio.it","password":"..."}'
+# {"token":"...","user":{...}}
+
+curl -s http://localhost:4000/api/v1/accounts -H "Authorization: Bearer $TOKEN"
+```
+
+Con il secondo fattore attivo il login risponde `{"twoFactorRequired":true,
+"challenge":"..."}`: si completa con `POST /api/v1/auth/token/two-factor` e
+`{"challenge":"...","code":"123456"}` (oppure `"backupCode"`). Il logout è
+`DELETE /api/v1/auth/token`.
+
+Ogni token è una sessione come quelle del browser: compare in
+**Impostazioni → Dispositivi collegati** e da lì si disconnette. I tentativi di
+login sono limitati per indirizzo IP. Se esponi l'API su internet mettila
+dietro HTTPS, come il sito.
+
 ## Backup e ripristino
 
 I dati stanno tutti in Postgres. Il backup è un `pg_dump`:
@@ -104,9 +129,9 @@ scarichi l'export JSON o CSV di tutto l'household.
 
 ### Conti, Pocket e buste
 
-Un **Pocket** è un conto con un conto padre. Nei totali ogni conto conta una
-volta sola: il totale di un conto comprensivo dei suoi Pocket è un dato di
-lettura, non si somma mai al patrimonio.
+Un **Pocket** è un conto dentro un conto. Ogni conto nasce con un Pocket
+"Principale" che tiene i soldi non messi da parte: i saldi si registrano sui
+Pocket e il totale del conto è la loro somma, così niente si conta due volte.
 
 Una **busta** risponde a "con quali soldi?".
 
@@ -136,14 +161,16 @@ npm install
 node scripts/init-env.mjs
 docker compose up -d db        # solo il database
 npm run db:migrate
-npm run dev                    # http://localhost:3000
+npm run dev                    # API su :4000, frontend su http://localhost:3000
 ```
+
+Serve Node 22 o successivo.
 
 | Comando | Cosa fa |
 | --- | --- |
-| `npm run dev` | Server di sviluppo |
-| `npm run build` | Build di produzione (standalone) |
-| `npm start` | Serve la build standalone |
+| `npm run dev` | API e frontend in sviluppo, insieme |
+| `npm run build` | Build di produzione di API e frontend |
+| `npm run start:api` / `npm run start:web` | Servono le build di produzione |
 | `npm test` | Test unitari (Vitest) |
 | `npm run test:e2e` | Test end-to-end (Playwright) |
 | `npm run typecheck` | Controllo dei tipi |
@@ -176,20 +203,25 @@ toccano mai i dati di sviluppo.
 ## Struttura
 
 ```
-src/
-├── app/              Pagine (App Router) e Server Action
-├── components/       Interfaccia: primitive, grafici, navigazione
-├── db/               Schema Drizzle e migrazioni SQL versionate
-├── lib/              Dominio puro e testabile: denaro, cambi,
-│                     ripartizione, buste, regole, CSV
-├── server/           Accesso ai dati, sempre filtrato per household
-├── worker/           Job pianificati (tassi, snapshot, giroconti)
-└── messages/         Traduzioni italiano e inglese
+packages/domain/      Dominio puro e testabile: denaro, cambi, ripartizione,
+                      buste, regole, CSV, date
+apps/api/             API REST (NestJS), l'unica che parla col database
+├── src/modules/      Controller per area: conti, buste, movimenti, paga...
+├── src/data/         Accesso ai dati, sempre filtrato per household
+├── src/db/           Schema Drizzle e migrazioni SQL versionate
+├── src/auth/         Better Auth: password, TOTP, passkey
+└── src/jobs/         Job pianificati (tassi, snapshot, giroconti)
+apps/web/             Frontend (Next.js)
+├── src/app/          Pagine (App Router) e Server Action
+├── src/data/         Letture dall'API
+├── src/components/   Interfaccia: primitive, grafici, navigazione
+└── src/messages/     Traduzioni italiano e inglese
 ```
 
-La regola che tiene in piedi l'architettura: `src/lib` non conosce il
-database, `src/server` non conosce React, e ogni query porta con sé il suo
-`householdId`.
+La regola che tiene in piedi l'architettura: il dominio non conosce il
+database, l'API non conosce React, il frontend non conosce SQL, e ogni query
+porta con sé il suo `householdId`, che arriva dalla sessione e mai dal client.
+Dettagli in [`docs/architettura.md`](docs/architettura.md).
 
 ---
 

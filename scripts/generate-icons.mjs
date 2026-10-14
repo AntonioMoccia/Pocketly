@@ -123,10 +123,10 @@ function encodePng(size, pixels) {
 }
 
 const targets = [
-  { file: "public/icon-192.png", size: 192, options: {} },
-  { file: "public/icon-512.png", size: 512, options: {} },
-  { file: "public/icon-maskable.png", size: 512, options: { maskable: true } },
-  { file: "public/apple-icon.png", size: 180, options: {} },
+  { file: "apps/web/public/icon-192.png", size: 192, options: {} },
+  { file: "apps/web/public/icon-512.png", size: 512, options: {} },
+  { file: "apps/web/public/icon-maskable.png", size: 512, options: { maskable: true } },
+  { file: "apps/web/public/apple-icon.png", size: 180, options: {} },
 ];
 
 for (const target of targets) {

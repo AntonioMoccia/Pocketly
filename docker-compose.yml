@@ -16,8 +16,14 @@ services:
       timeout: 5s
       retries: 20
 
-  app:
-    build: .
+  # API: l'unico servizio che parla col database. Applica le migrazioni
+  # all'avvio e fa girare i job pianificati. Il sito la raggiunge sulla rete
+  # interna; la porta pubblicata serve ad app e script, che accedono con un
+  # token (vedi README, "Accesso da app e script").
+  api:
+    build:
+      context: .
+      target: api
     restart: unless-stopped
     depends_on:
       db:
@@ -25,20 +31,35 @@ services:
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-pocketly}:${POSTGRES_PASSWORD:-pocketly}@db:5432/${POSTGRES_DB:-pocketly}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET mancante, vedi .env.example}
+      # URL pubblico del frontend: e l'origine dei cookie e delle passkey.
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY mancante, vedi .env.example}
       EDITION: ${EDITION:-self}
       DEFAULT_LOCALE: ${DEFAULT_LOCALE:-it}
       SIGNUP: ${SIGNUP:-invite}
+      TZ: ${TZ:-Europe/Rome}
+      API_CORS_ORIGINS: ${API_CORS_ORIGINS:-}
+      API_TRUSTED_PROXIES: ${API_TRUSTED_PROXIES:-loopback, uniquelocal}
+      NODE_ENV: production
+    ports:
+      - "${API_PORT:-4000}:4000"
+
+  # Frontend: interfaccia e Server Action, chiama l'API sulla rete interna.
+  web:
+    build:
+      context: .
+      target: web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      API_URL: http://api:4000
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
+      DEFAULT_LOCALE: ${DEFAULT_LOCALE:-it}
       NODE_ENV: production
     ports:
       - "${APP_PORT:-3000}:3000"
-    healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 40s
 
 volumes:
   db-data:

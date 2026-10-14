@@ -1,11 +1,14 @@
 node_modules
 .next
+**/.next
+**/node_modules
+**/dist
 .git
 .env
 .env.local
 test-results
 playwright-report
-tests/e2e
+apps/web/tests
 docs
 *.pdf
 *.md

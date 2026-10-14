@@ -1,67 +1,75 @@
-# Immagine unica: app Next, worker dei job e migrazioni nello stesso
-# container. Un self-hosting non deve orchestrare tre servizi per far girare
-# un'app di budget: bastano questa immagine e Postgres.
+# Due immagini dallo stesso Dockerfile, una per servizio:
+#   docker build --target api .   -> API NestJS: database, migrazioni, job
+#   docker build --target web .   -> frontend Next.js, parla solo con l'API
+# docker compose le costruisce entrambe.
 
 FROM node:24-alpine AS base
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 # --- Dipendenze -------------------------------------------------------------
-FROM base AS deps
+# Solo i manifest: la cache di questo strato si invalida quando cambiano le
+# dipendenze, non a ogni modifica del codice.
+FROM base AS manifests
 COPY package.json package-lock.json ./
+COPY apps/api/package.json apps/api/
+COPY apps/web/package.json apps/web/
+COPY packages/domain/package.json packages/domain/
+
+FROM manifests AS deps
 # `npm ci` rispetta il lockfile: la stessa immagine ricostruita da lo stesso
 # albero di dipendenze.
 RUN npm ci --ignore-scripts && npm rebuild @node-rs/argon2 --foreground-scripts
 
-# Albero di sole dipendenze di produzione: lo usano le migrazioni e il worker,
-# che girano fuori dal bundle standalone di Next e hanno bisogno delle proprie
-# dipendenze transitive (pg-boss, per esempio, ne porta diverse).
-FROM base AS proddeps
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev --ignore-scripts && npm rebuild @node-rs/argon2 --foreground-scripts
+# Dipendenze di produzione dell'API: le migrazioni e il bundle tengono fuori i
+# pacchetti npm, quindi a runtime servono installati.
+FROM manifests AS api-deps
+RUN npm ci --omit=dev --workspace=@pocketly/api --ignore-scripts \
+  && npm rebuild @node-rs/argon2 --foreground-scripts
 
 # --- Build ------------------------------------------------------------------
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# Valori fittizi: servono solo a far passare la validazione in fase di build,
-# a runtime arrivano quelli veri dall'ambiente.
-ENV NEXT_TELEMETRY_DISABLED=1 \
-    DATABASE_URL=postgres://build:build@localhost:5432/build \
-    BETTER_AUTH_SECRET=build-only-secret-build-only-secret \
-    ENCRYPTION_KEY=YnVpbGQtb25seS1rZXktLWJ1aWxkLW9ubHkta2V5MTI=
-RUN npm run build
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN npm run build -w @pocketly/api && npm run build -w @pocketly/web
 
-# --- Runtime ----------------------------------------------------------------
-FROM base AS runner
+# --- API --------------------------------------------------------------------
+FROM base AS api
+ENV NODE_ENV=production \
+    API_PORT=4000 \
+    API_HOST=0.0.0.0
+RUN addgroup -g 1001 -S nodejs && adduser -S pocketly -u 1001
+
+COPY --from=api-deps --chown=pocketly:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=pocketly:nodejs /app/apps/api/package.json ./apps/api/package.json
+COPY --from=builder --chown=pocketly:nodejs /app/apps/api/dist ./apps/api/dist
+# Le migrazioni girano dai sorgenti, prima che l'API accetti richieste.
+COPY --from=builder --chown=pocketly:nodejs /app/apps/api/src/db ./apps/api/src/db
+COPY --chown=pocketly:nodejs docker-entrypoint.sh ./
+RUN chmod +x docker-entrypoint.sh
+
+USER pocketly
+EXPOSE 4000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.API_PORT||4000)+'/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+ENTRYPOINT ["./docker-entrypoint.sh"]
+
+# --- Frontend ---------------------------------------------------------------
+FROM base AS web
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000 \
     HOSTNAME=0.0.0.0
-
 RUN addgroup -g 1001 -S nodejs && adduser -S pocketly -u 1001
 
-# Prima le dipendenze di produzione, poi il bundle standalone: dove i due si
-# sovrappongono vince lo standalone, che porta le versioni tracciate da Next.
-COPY --from=proddeps --chown=pocketly:nodejs /app/node_modules ./node_modules
-COPY --from=builder --chown=pocketly:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=pocketly:nodejs /app/.next/static ./.next/static
-COPY --from=builder --chown=pocketly:nodejs /app/public ./public
-
-# Migrazioni e worker girano fuori dal bundle: servono i sorgenti e le
-# dipendenze che li reggono.
-COPY --from=builder --chown=pocketly:nodejs /app/src/db ./src/db
-COPY --from=builder --chown=pocketly:nodejs /app/src/server ./src/server
-COPY --from=builder --chown=pocketly:nodejs /app/src/lib ./src/lib
-COPY --from=builder --chown=pocketly:nodejs /app/src/worker ./src/worker
-COPY --chown=pocketly:nodejs docker-entrypoint.sh ./
-
-RUN chmod +x docker-entrypoint.sh
+# Il bundle standalone riproduce il monorepo: il server sta in apps/web.
+COPY --from=builder --chown=pocketly:nodejs /app/apps/web/.next/standalone ./
+COPY --from=builder --chown=pocketly:nodejs /app/apps/web/.next/static ./apps/web/.next/static
+COPY --from=builder --chown=pocketly:nodejs /app/apps/web/public ./apps/web/public
 
 USER pocketly
 EXPOSE 3000
-
-HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-
-ENTRYPOINT ["./docker-entrypoint.sh"]
+CMD ["node", "apps/web/server.js"]
